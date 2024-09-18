@@ -20,6 +20,7 @@
 #include <sbv_patches.h>
 #include <debug.h>
 #include <ps2sdkapi.h>
+#include <sio.h>
 
 
 #include "irx_variables.h"
@@ -27,6 +28,9 @@
 #include "excepHandler.h"
 #include "cmdHandler.h"
 #include "globals.h"
+#ifdef IOPRP
+#include <iopcontrol_special.h>
+#endif
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -187,14 +191,24 @@ static void printWelcomeInfo()
     scr_printf("Initializing...\n");
 }
 
+#ifdef IOPRP
+extern unsigned char ioprp[];
+extern unsigned int size_ioprp;
+#endif
+
 static void restartIOP()
 {
-    dbgscr_printf("reset iop\n");
 
    SifInitRpc(0);
+#ifdef IOPRP
+    dbgscr_printf("reset iop (w/IOPRP)\n");
+   while(!SifIopRebootBuffer(ioprp, size_ioprp)){};
+#else
+    dbgscr_printf("reset iop\n");
    while(!SifIopReset(NULL, 0)){};
+#endif
    while(!SifIopSync()){};
-   
+
    SifInitRpc(0);
    sbv_patch_enable_lmb();
    sbv_patch_disable_prefix_check();
@@ -207,17 +221,23 @@ static void restartIOP()
 // This function is defined as weak in ps2sdkc, so how
 // we are not using time zone, so we can safe some KB
 void _ps2sdk_timezone_update() {}
-void _libcglue_rtc_update() {}
+void _libcglue_rtc_update() {} // this function must be ALWAYS overriden for COH-H models
 
 DISABLE_PATCHED_FUNCTIONS(); // Disable the patched functionalities
 DISABLE_EXTRA_TIMERS_FUNCTIONS(); // Disable the extra functionalities for timers
 PS2_DISABLE_AUTOSTART_PTHREAD(); // Disable pthread functionality
 
+
 int main(int argc, char *argv[])
 {
+    sio_puts("# PS2LINK Start");
     SifInitRpc(0);
-    init_scr();
+#ifdef COH
+    SifLoadStartModule("rom0:CDVDFSV", 0, NULL, NULL); // its not listed on arcade IOPBTCONF
+#endif
+    restartIOP();
 
+    init_scr();
     printWelcomeInfo();
     if (if_conf_len == 0) {
         scr_printf("Initial boot, will load config then reset\n");
@@ -226,10 +246,9 @@ int main(int argc, char *argv[])
     }
 
     installExceptionHandlers();
-    restartIOP();
 
     strcpy(elfName, argv[0]);
-    dbgscr_printf("argv[0] is %s\n", elfName);   
+    dbgscr_printf("argv[0] is %s\n", elfName);
 
     dbgscr_printf("loading modules\n");
     loadModules();

@@ -1,4 +1,4 @@
-EE_BIN  = ps2link.elf
+EE_BIN  ?= ps2link.elf
 EE_OBJS = ps2link.o cmdHandler.o excepHandler.o exceptions.o
 EE_INCS += -I../include
 
@@ -30,6 +30,23 @@ EE_LDFLAGS += -Wl,--gc-sections
 endif
 EE_LDFLAGS += -Wl,-Map,ps2link.map
 
+
+ifeq ($(COH),1)
+EE_CFLAGS += -DCOH
+EE_BIN = ps2link_arcade.elf
+IOPRP_BIN = ../iop/acioprp.img
+IOPRP = 1
+endif
+
+ifeq ($(IOPRP),1)
+EE_CFLAGS += -DIOPRP
+EE_OBJS += ioprp.o
+EE_LIBS += -liopreboot
+ifeq ($(IOPRP_BIN),)
+$(error IOPRP feature requested but image path is empty. provide it via IOPRP_BIN variable)
+endif
+endif
+
 # This is to read the closest tag version
 APP_VERSION := $(shell git describe --tags --abbrev=0)
 EE_CFLAGS += -DAPP_VERSION=\"$(APP_VERSION)\"
@@ -58,6 +75,8 @@ ps2link_irx.c:
 	$(PS2SDK)/bin/bin2c ../iop/ps2link.irx $@ ps2link_irx
 %_irx.c:
 	$(PS2SDK)/bin/bin2c $(PS2SDK)/iop/irx/$*.irx $@ $*_irx
+ioprp.c: $(IOPRP_BIN)
+	bin2c $< $@ ioprp
 
 
 include $(PS2SDK)/Defs.make
